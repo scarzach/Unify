@@ -1,0 +1,371 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  name                  String?
+  email                 String?                @unique
+  emailVerified         DateTime?
+  image                 String?
+  passwordHash          String?
+  role                  String                 @default("USER")
+  accounts              Account[]
+  sessions              Session[]
+  personalWorkspace     Workspace?              @relation("PersonalWorkspaceOwner")
+  workspaceMembers      WorkspaceMember[]
+  sentWorkspaceInvites  WorkspaceInvite[]      @relation("WorkspaceInviteSender")
+  vehicles              Vehicle[]
+  files                 File[]
+  secretLinks           SecretLink[]
+  fileActivities        FileActivity[]
+  financialConnections  FinancialConnection[]
+  financialAccounts     FinancialAccount[]
+  financialTransactions FinancialTransaction[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model Workspace {
+  id                   String                 @id @default(cuid())
+  name                 String
+  slug                 String?                @unique
+  isPersonal           Boolean                @default(false)
+  personalOwnerId      String?                @unique
+  personalOwner        User?                  @relation("PersonalWorkspaceOwner", fields: [personalOwnerId], references: [id], onDelete: Cascade)
+  members              WorkspaceMember[]
+  invites              WorkspaceInvite[]
+  vehicles             Vehicle[]
+  files                File[]
+  secretLinks          SecretLink[]
+  fileActivities       FileActivity[]
+  financialConnections FinancialConnection[]
+  financialAccounts    FinancialAccount[]
+  financialTransactions FinancialTransaction[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([isPersonal, createdAt])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([userId, createdAt])
+}
+
+model WorkspaceInvite {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email        String
+  role         WorkspaceRole @default(MEMBER)
+  token        String        @unique
+  invitedById  String
+  invitedBy    User          @relation("WorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([workspaceId, email, acceptedAt])
+  @@index([email, expiresAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Vehicle {
+  id        String     @id @default(cuid())
+  workspaceId String
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User       @relation(fields: [ownerId], references: [id])
+  make      String
+  model     String
+  trim      String?
+  year      Int
+  nickname  String?
+  vin       String?    @unique
+  photoUrl  String?
+  logs      LogEntry[]
+  parts     Part[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([workspaceId, createdAt])
+}
+
+enum LogType {
+  MOD
+  REPAIR
+  MAINTENANCE
+}
+
+model LogEntry {
+  id          String       @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle      @relation(fields: [vehicleId], references: [id])
+  type        LogType
+  date        DateTime     @default(now())
+  title       String
+  description String?
+  odometer    Int?
+  cost        Decimal?     @db.Decimal(10, 2)
+  attachments Attachment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum PartStatus {
+  INSTALLED
+  WISHLIST
+  REPLACED
+}
+
+model Part {
+  id         String     @id @default(cuid())
+  vehicleId  String
+  vehicle    Vehicle    @relation(fields: [vehicleId], references: [id])
+  name       String
+  partNumber String?
+  status     PartStatus @default(INSTALLED)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  logEntryId String
+  logEntry   LogEntry @relation(fields: [logEntryId], references: [id])
+  fileId     String
+  file       File     @relation(fields: [fileId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model File {
+  id          String         @id @default(cuid())
+  workspaceId String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  filename    String
+  path        String         @unique
+  mimeType    String
+  sizeBytes   Int
+  note        String?
+  uploaderId  String
+  uploader    User           @relation(fields: [uploaderId], references: [id])
+  isPublic    Boolean        @default(false)
+  attachments Attachment[]
+  secretLinks SecretLink[]
+  activities  FileActivity[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([workspaceId, createdAt])
+}
+
+enum SecretLinkType {
+  FILE
+  TEXT
+  MESSAGE
+}
+
+model SecretLink {
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  workspaceId      String
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId          String
+  owner            User           @relation(fields: [ownerId], references: [id])
+  fileId           String?
+  file             File?          @relation(fields: [fileId], references: [id])
+  title            String?
+  note             String?
+  type             SecretLinkType
+  contentEncrypted String?
+  passwordHash     String?
+  expiresAt        DateTime?
+  viewLimit        Int?
+  viewCount        Int            @default(0)
+  isBurned         Boolean        @default(false)
+  revokedAt        DateTime?
+  lastAccessedAt   DateTime?
+  activities       FileActivity[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([workspaceId, createdAt])
+}
+
+enum FileActivityType {
+  FILE_UPLOADED
+  LINK_CREATED
+  LINK_REVOKED
+  LINK_ACCESSED
+}
+
+model FileActivity {
+  id           String           @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  fileId       String?
+  file         File?            @relation(fields: [fileId], references: [id])
+  secretLinkId String?
+  secretLink   SecretLink?      @relation(fields: [secretLinkId], references: [id])
+  type         FileActivityType
+  message      String?
+  createdAt    DateTime         @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+enum FinancialConnectionProvider {
+  MANUAL_IMPORT
+  PLAID
+  TELLER
+}
+
+enum FinancialConnectionStatus {
+  ACTIVE
+  NEEDS_REAUTH
+  DISCONNECTED
+}
+
+enum FinancialAccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  CASH
+  OTHER
+}
+
+enum FinancialTransactionDirection {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+model FinancialConnection {
+  id             String                      @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          User                        @relation(fields: [ownerId], references: [id])
+  provider       FinancialConnectionProvider
+  status         FinancialConnectionStatus   @default(ACTIVE)
+  label          String
+  institution    String?
+  accessToken    String?
+  externalItemId String?
+  lastSyncedAt   DateTime?
+  accounts       FinancialAccount[]
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@index([workspaceId, createdAt])
+}
+
+model FinancialAccount {
+  id              String                 @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId         String
+  owner           User                   @relation(fields: [ownerId], references: [id])
+  connectionId    String
+  connection      FinancialConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  name            String
+  institutionName String?
+  type            FinancialAccountType   @default(CHECKING)
+  currency        String                 @default("USD")
+  mask            String?
+  externalId      String?
+  transactions    FinancialTransaction[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model FinancialTransaction {
+  id          String                        @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User                          @relation(fields: [ownerId], references: [id])
+  accountId   String
+  account     FinancialAccount              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  postedAt    DateTime
+  description String
+  merchant    String?
+  category    String?
+  amount      Decimal                       @db.Decimal(12, 2)
+  direction   FinancialTransactionDirection
+  sourceHash  String
+  rawSource   Json?
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  @@unique([workspaceId, sourceHash])
+  @@index([ownerId, postedAt])
+  @@index([accountId, postedAt])
+  @@index([workspaceId, postedAt])
+}
