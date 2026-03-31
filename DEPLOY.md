@@ -83,7 +83,6 @@ cp .env.example .env
 Example production values:
 
 ```env
-DATABASE_URL="postgresql://unify_user:strong_password@db:5432/unify_db?schema=public"
 AUTH_SECRET="generate-a-long-random-secret"
 NEXTAUTH_URL="https://your-domain.com"
 NODE_ENV="production"
@@ -122,8 +121,15 @@ What this does:
 
 - starts PostgreSQL in one container
 - builds and starts the Next.js app in another container
+- injects a container-safe `DATABASE_URL` that points at the `db` service
 - runs `npx prisma migrate deploy` automatically before the app starts
 - keeps `uploads/` mounted from the host so shared files survive rebuilds
+
+Important:
+
+- do not use `localhost` in the production `DATABASE_URL` for the app container
+- inside Docker Compose, the Postgres host is `db`
+- if you keep a `DATABASE_URL` line in `.env`, make sure it also uses `@db:5432`, not `@localhost:5432`
 
 ## Put Nginx in Front
 

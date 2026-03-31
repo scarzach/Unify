@@ -26,6 +26,10 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-unify_user}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-unify_db}?schema=public
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
